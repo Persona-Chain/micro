@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  username       String   @unique
+  email          String   @unique
+  googleId       String?  @unique
+  avatar         String?
+  passwordHash   String
+  displayName    String?
+  isVerified     Boolean  @default(false)
+  isLocked       Boolean  @default(false)
+  lockedUntil    DateTime?
+  role           UserRole @default(USER)
+  reputation     Int      @default(0)
+  totalEarned    Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  sessions       UserSession[]
+  profile        Profile?
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model TwoFactorCode {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  code      String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+enum UserRole {
+  USER
+  EMPLOYER
+  MODERATOR
+  ADMIN
+  SUPERADMIN
+}
+
+// Tasks and marketplace
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  employer    User     @relation(fields: [employerId], references: [id])
+  employerId  String
+  reward      Float
+  currency    String   @default("sats")
+  status      TaskStatus @default(OPEN)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  submissions TaskSubmission[]
+  escrow      Escrow?
+  tags        TaskTag[]
+}
+
+model TaskTag {
+  id     String @id @default(cuid())
+  name   String
+  tasks  Task[] @relation(references: [id])
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+model TaskSubmission {
+  id         String @id @default(cuid())
+  task       Task   @relation(fields: [taskId], references: [id])
+  taskId     String
+  user       User   @relation(fields: [userId], references: [id])
+  userId     String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  files      SubmissionFile[]
+}
+
+model SubmissionFile {
+  id String @id @default(cuid())
+  submission TaskSubmission @relation(fields: [submissionId], references: [id])
+  submissionId String
+  url String
+  filename String
+  size Int
+}
+
+model Escrow {
+  id String @id @default(cuid())
+  task Task @relation(fields: [taskId], references: [id])
+  taskId String
+  amount Float
+  currency String @default("sats")
+  status EscrowStatus @default(FUNDED)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  transactions EscrowTransaction[]
+}
+
+enum EscrowStatus {
+  FUNDED
+  RELEASED
+  REFUNDED
+  DISPUTED
+}
+
+model EscrowTransaction {
+  id String @id @default(cuid())
+  escrow Escrow @relation(fields: [escrowId], references: [id])
+  escrowId String
+  amount Float
+  type EscrowTxType
+  createdAt DateTime @default(now())
+}
+
+enum EscrowTxType {
+  LOCK
+  RELEASE
+  REFUND
+}
+
+model Wallet {
+  id String @id @default(cuid())
+  user User @relation(fields: [userId], references: [id])
+  userId String
+  balance Float @default(0)
+}
+
+model WalletTransaction {
+  id String @id @default(cuid())
+  wallet Wallet @relation(fields: [walletId], references: [id])
+  walletId String
+  amount Float
+  type String
+  createdAt DateTime @default(now())
+}
+
+model Conversation {
+  id String @id @default(cuid())
+  participants User[]
+  messages Message[]
+  updatedAt DateTime @updatedAt
+}
+
+model Message {
+  id String @id @default(cuid())
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  sender User @relation(fields: [senderId], references: [id])
+  senderId String
+  content String
+  createdAt DateTime @default(now())
+  read Boolean @default(false)
+}
+
+model Notification {
+  id String @id @default(cuid())
+  user User @relation(fields: [userId], references: [id])
+  userId String
+  type String
+  title String
+  message String
+  read Boolean @default(false)
+  link String?
+  createdAt DateTime @default(now())
+}
+
+model Article {
+  id String @id @default(cuid())
+  title String
+  content String
+  createdAt DateTime @default(now())
+}
+
+model SupportTicket {
+  id String @id @default(cuid())
+  user User @relation(fields: [userId], references: [id])
+  userId String
+  subject String
+  description String
+  status String
+  createdAt DateTime @default(now())
+}
+
+model Dispute {
+  id String @id @default(cuid())
+  task Task @relation(fields: [taskId], references: [id])
+  taskId String
+  initiator User @relation(fields: [initiatorId], references: [id])
+  initiatorId String
+  status String
+  createdAt DateTime @default(now())
+}

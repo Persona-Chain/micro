@@ -1,0 +1,534 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                Int      @id @default(autoincrement())
+  username          String   @unique
+  email             String   @unique
+  passwordHash      String
+  emailVerified     Boolean  @default(false)
+  verificationToken String?  @unique
+  resetToken        String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  wallet            Wallet?
+  transactions      Transaction[]
+  internalBalance   InternalBalance?
+  tasks             Task[]
+  applications      TaskApplication[]
+  submissions       TaskSubmission[]
+  profile           UserProfile?
+  avatar            Avatar?
+  escrowsAsEmployer Escrow[] @relation("EscrowEmployer")
+  escrowsAsWorker   Escrow[] @relation("EscrowWorker")
+  disputesOpened    Dispute[] @relation("DisputeOpener")
+  disputeComments   DisputeComment[]
+  disputeEvidence   DisputeEvidence[]
+  escrowAuditLogs   EscrowAuditLog[]
+  earningsSnapshots EarningsSnapshot[]
+  notifications     Notification[]
+  activityFeed      ActivityFeed[]
+  conversationLinks ConversationParticipant[]
+  sentMessages      Message[]
+  portfolioProjects PortfolioProject[]
+  reviewsGiven      Review[] @relation("ReviewReviewer")
+  reviewsReceived   Review[] @relation("ReviewTarget")
+  settings          UserSettings?
+  apiKeys           ApiKey[]
+}
+
+model Wallet {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @unique
+  address             String   @unique
+  encryptedPrivateKey String
+  publicKey           String
+  createdAt           DateTime @default(now())
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  utxos               Utxo[]
+}
+
+model Transaction {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  txid           String   @unique
+  type           String
+  amount         Int
+  fee            Int?
+  confirmations  Int      @default(0)
+  status         String   @default("pending")
+  address        String
+  createdAt      DateTime @default(now())
+  taskId         Int?
+  escrowId       Int?
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task           Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  escrow         Escrow?  @relation(fields: [escrowId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([escrowId, createdAt])
+}
+
+model UserProfile {
+  id                   Int      @id @default(autoincrement())
+  userId               Int      @unique
+  username             String   @unique
+  displayName          String?
+  bio                  String?
+  location             String?
+  website              String?
+  github               String?
+  twitter              String?
+  avatarUrl            String?
+  reputationScore      Int      @default(0)
+  averageRating        Float    @default(0)
+  totalReviews         Int      @default(0)
+  totalCompletedTasks  Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([username])
+}
+
+model Avatar {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @unique
+  filePath   String
+  uploadedAt DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSettings {
+  userId             Int      @id
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  taskUpdates        Boolean  @default(true)
+  paymentAlerts      Boolean  @default(true)
+  notificationSound  Boolean  @default(true)
+  marketing          Boolean  @default(false)
+  twoFactorEnabled   Boolean  @default(false)
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  name       String?
+  key        String   @unique
+  revoked    Boolean  @default(false)
+  lastUsedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PortfolioProject {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  title       String
+  description String?
+  imageUrl    String?
+  projectUrl  String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Review {
+  id           Int      @id @default(autoincrement())
+  taskId       Int
+  reviewerId   Int
+  targetUserId Int
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewer     User     @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  targetUser   User     @relation("ReviewTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, reviewerId])
+  @@index([targetUserId, createdAt])
+  @@index([reviewerId, createdAt])
+}
+
+model Utxo {
+  id             Int      @id @default(autoincrement())
+  walletId       Int
+  txid           String
+  vout           Int
+  amount         Int
+  address        String
+  spent          Boolean  @default(false)
+  confirmations  Int      @default(0)
+
+  wallet         Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([txid, vout])
+  @@index([walletId, spent])
+}
+
+model InternalBalance {
+  userId            Int      @id
+  availableBalance  Int      @default(0)
+  pendingBalance    Int      @default(0)
+  reservedBalance   Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  slug      String   @unique
+  icon      String?
+  tasks     Task[]
+}
+
+model Tag {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  tasks TaskTag[]
+}
+
+model Task {
+  id                       Int       @id @default(autoincrement())
+  userId                   Int
+  title                    String?
+  slug                     String?   @unique
+  shortDescription         String?
+  fullDescription          String?
+  requirements             String?
+  instructions             String?
+  rewardAmount             Int       @default(0)
+  currency                 String    @default("BSV")
+  maxWorkers               Int       @default(1)
+  estimatedCompletionTime  Int?      // minutes
+  expirationDate           DateTime?
+  visibility               String    @default("public")
+  featuredTask             Boolean   @default(false)
+  autoApprove              Boolean   @default(false)
+  autoReleaseAfterDays     Int?
+  status                   String    @default("draft")
+  moderationStatus         String    @default("pending")
+  categoryId               Int?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  publishedAt              DateTime?
+
+  step1Complete            Boolean   @default(false)
+  step2Complete            Boolean   @default(false)
+  step3Complete            Boolean   @default(false)
+  step4Complete            Boolean   @default(false)
+
+  searchText               String?
+  lockedRewardTotal        Int       @default(0)
+
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category                 Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags                     TaskTag[]
+  attachments              TaskAttachment[]
+  moderations              TaskModeration[]
+  applications             TaskApplication[]
+  submissions              TaskSubmission[]
+  payments                 Transaction[]
+  escrow                    Escrow?
+  disputes                  Dispute[]
+  reviews                   Review[]
+
+  @@index([userId, status])
+  @@index([status, moderationStatus])
+}
+
+model TaskSubmission {
+  id          Int      @id @default(autoincrement())
+  taskId      Int
+  userId      Int
+  message     String
+  status      String   @default("submitted") // submitted, approved, rejected, paid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  decidedAt   DateTime?
+  paidAt      DateTime?
+  payoutTxid  String?
+
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model TaskApplication {
+  id         Int      @id @default(autoincrement())
+  taskId     Int
+  userId     Int
+  status     String   @default("applied") // applied, withdrawn, rejected, accepted
+  createdAt  DateTime @default(now())
+
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId, createdAt])
+  @@index([taskId, createdAt])
+}
+
+model TaskTag {
+  taskId Int
+  tagId  Int
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+}
+
+model TaskAttachment {
+  id       Int      @id @default(autoincrement())
+  taskId   Int
+  fileName String
+  filePath String
+  fileSize Int
+  mimeType String
+  createdAt DateTime @default(now())
+
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model TaskModeration {
+  id         Int      @id @default(autoincrement())
+  taskId     Int
+  moderatorId Int?
+  decision   String   // pending, approved, rejected
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+}
+
+model Escrow {
+  id          Int      @id @default(autoincrement())
+  taskId      Int      @unique
+  employerId  Int
+  workerId    Int?
+  amount      Int
+  feeAmount   Int      @default(0)
+  netAmount   Int      @default(0)
+  status      String   @default("pending_funding")
+  fundedAt    DateTime?
+  releasedAt  DateTime?
+  refundedAt  DateTime?
+  disputedAt  DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employer     User     @relation("EscrowEmployer", fields: [employerId], references: [id], onDelete: Cascade)
+  worker       User?    @relation("EscrowWorker", fields: [workerId], references: [id], onDelete: SetNull)
+  milestones   EscrowMilestone[]
+  transactions EscrowTransaction[]
+  disputes     Dispute[]
+  auditLogs    EscrowAuditLog[]
+  payouts      Transaction[]
+
+  @@index([employerId, createdAt])
+  @@index([workerId, createdAt])
+}
+
+model EscrowTransaction {
+  id          Int      @id @default(autoincrement())
+  escrowId    Int
+  type        String
+  amount      Int
+  txReference String?
+  createdAt   DateTime @default(now())
+
+  escrow      Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+
+  @@index([escrowId, createdAt])
+}
+
+model EscrowMilestone {
+  id          Int      @id @default(autoincrement())
+  escrowId    Int
+  title       String
+  description String?
+  amount      Int
+  orderIndex  Int
+  status      String   @default("pending")
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+
+  escrow      Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+
+  @@index([escrowId, orderIndex])
+}
+
+model Dispute {
+  id         Int      @id @default(autoincrement())
+  escrowId   Int
+  taskId     Int
+  openedBy   Int
+  reason     String
+  status     String   @default("open")
+  resolution String?
+  createdAt  DateTime @default(now())
+  resolvedAt DateTime?
+
+  escrow     Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  opener     User     @relation("DisputeOpener", fields: [openedBy], references: [id], onDelete: Cascade)
+  evidence   DisputeEvidence[]
+  comments   DisputeComment[]
+
+  @@index([escrowId, createdAt])
+  @@index([taskId, createdAt])
+}
+
+model DisputeEvidence {
+  id          Int      @id @default(autoincrement())
+  disputeId   Int
+  userId      Int
+  filePath    String
+  description String?
+  createdAt   DateTime @default(now())
+
+  dispute     Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId, createdAt])
+}
+
+model DisputeComment {
+  id        Int      @id @default(autoincrement())
+  disputeId Int
+  userId    Int
+  message   String
+  createdAt DateTime @default(now())
+
+  dispute   Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId, createdAt])
+}
+
+model EscrowAuditLog {
+  id        Int      @id @default(autoincrement())
+  escrowId  Int
+  userId    Int?
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  escrow    Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([escrowId, createdAt])
+}
+
+model EarningsSnapshot {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  amount    Int
+  period    String
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period, date])
+  @@index([userId, date])
+  @@index([userId, period])
+}
+
+model Notification {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  type       String
+  message    String
+  link       String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Conversation {
+  id           Int      @id @default(autoincrement())
+  type         String   @default("direct")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  id             Int       @id @default(autoincrement())
+  conversationId Int
+  userId         Int
+  lastReadAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, conversationId])
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  content        String
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model ActivityFeed {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  type        String
+  referenceId String?
+  message     String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
