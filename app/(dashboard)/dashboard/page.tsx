@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { formatBsv, formatBsvFromSats, timeAgo } from "@/lib/utils"
+import { formatBsvFromSats, timeAgo } from "@/lib/utils"
 import {
   AreaChart,
   Area,
@@ -71,13 +71,32 @@ type DashboardTask = {
   reward: number
 }
 
+type EarningsPoint = {
+  date: string
+  earnings: number
+}
+
+type DashboardEarnings = {
+  chart: EarningsPoint[]
+  thisWeek?: number | string | null
+  currentWeek?: number | string | null
+  weeklyEarnings?: number | string | null
+  weekTotal?: number | string | null
+  lastWeek?: number | string | null
+  previousWeek?: number | string | null
+  previousWeekEarnings?: number | string | null
+  weekOverWeekPercent?: number | string | null
+  weeklyGrowthPercent?: number | string | null
+  growthPercent?: number | string | null
+}
+
 type DashboardOverview = {
   wallet: {
     availableBalance: number
     pendingBalance: number
     lockedBalance: number
   }
-  earnings: { chart: Array<{ date: string; earnings: number }> }
+  earnings: DashboardEarnings
   tasks: {
     activeTasks: number
     completedTasks: number
@@ -95,6 +114,219 @@ type DashboardOverview = {
   activeTasks: DashboardTask[]
 }
 
+type DashboardOverviewResponse = Partial<Omit<DashboardOverview, "wallet">> & {
+  wallet?: {
+    availableBalance?: number | string | null
+    pendingBalance?: number | string | null
+    lockedBalance?: number | string | null
+    reservedBalance?: number | string | null
+  }
+}
+
+type DashboardOverviewPayload = DashboardOverviewResponse | {
+  data?: DashboardOverviewResponse | null
+}
+
+type WalletBalancePayload = {
+  availableBalance?: number | string | null
+  pendingBalance?: number | string | null
+  confirmedBalance?: number | string | null
+  unconfirmedBalance?: number | string | null
+  reservedBalance?: number | string | null
+  lockedBalance?: number | string | null
+  totalBalance?: number | string | null
+  balanceSats?: number | string | null
+  sats?: number | string | null
+  balance?: WalletBalancePayload | number | string | null
+  balances?: WalletBalancePayload | null
+  data?: WalletBalancePayload | null
+  wallet?: WalletBalancePayload | null
+}
+
+const emptyDashboardOverview: DashboardOverview = {
+  wallet: {
+    availableBalance: 0,
+    pendingBalance: 0,
+    lockedBalance: 0,
+  },
+  earnings: { chart: [] },
+  tasks: {
+    activeTasks: 0,
+    completedTasks: 0,
+    pendingTasks: 0,
+    draftTasks: 0,
+  },
+  transactions: [],
+  notifications: [],
+  reputation: {
+    score: 0,
+    averageRating: 0,
+    totalReviews: 0,
+    completedTasks: 0,
+  },
+  activeTasks: [],
+}
+
+function toSats(value: unknown) {
+  const sats = Number(value || 0)
+  return Number.isFinite(sats) ? sats : 0
+}
+
+function toOptionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function isBalancePayload(value: unknown): value is WalletBalancePayload {
+  return Boolean(value && typeof value === "object")
+}
+
+function unwrapBalancePayload(data: WalletBalancePayload | null): WalletBalancePayload {
+  if (!data) return {}
+  if (isBalancePayload(data.data)) return unwrapBalancePayload(data.data)
+  if (isBalancePayload(data.wallet)) return unwrapBalancePayload(data.wallet)
+  if (isBalancePayload(data.balances)) return unwrapBalancePayload(data.balances)
+  if (isBalancePayload(data.balance)) return unwrapBalancePayload(data.balance)
+  return data
+}
+
+function readWalletBalance(data: WalletBalancePayload | null) {
+  const source = unwrapBalancePayload(data)
+  const available =
+    source.availableBalance ??
+    source.confirmedBalance ??
+    source.balanceSats ??
+    source.sats ??
+    (typeof source.balance === "number" || typeof source.balance === "string" ? source.balance : undefined)
+
+  return {
+    availableBalance: available !== undefined ? toSats(available) : toSats(source.totalBalance),
+    pendingBalance: toSats(source.pendingBalance ?? source.unconfirmedBalance),
+    lockedBalance: toSats(source.lockedBalance ?? source.reservedBalance),
+  }
+}
+
+function hasWalletBalanceFields(data: WalletBalancePayload | null) {
+  const source = unwrapBalancePayload(data)
+  return (
+    source.availableBalance !== undefined ||
+    source.pendingBalance !== undefined ||
+    source.confirmedBalance !== undefined ||
+    source.unconfirmedBalance !== undefined ||
+    source.lockedBalance !== undefined ||
+    source.reservedBalance !== undefined ||
+    source.totalBalance !== undefined ||
+    source.balanceSats !== undefined ||
+    source.sats !== undefined ||
+    typeof source.balance === "number" ||
+    typeof source.balance === "string"
+  )
+}
+
+function normalizeDashboardOverview(data: DashboardOverviewResponse): DashboardOverview {
+  const earningsChart = data.earnings?.chart
+  const wallet = readWalletBalance(data.wallet ?? null)
+
+  return {
+    wallet: {
+      availableBalance: wallet.availableBalance,
+      pendingBalance: wallet.pendingBalance,
+      lockedBalance: wallet.lockedBalance,
+    },
+    earnings: {
+      ...emptyDashboardOverview.earnings,
+      ...(data.earnings && typeof data.earnings === "object" ? data.earnings : {}),
+      chart: Array.isArray(earningsChart)
+        ? earningsChart.map((point) => ({
+            date: String(point?.date || ""),
+            earnings: toSats(point?.earnings),
+          }))
+        : emptyDashboardOverview.earnings.chart,
+    },
+    tasks: {
+      ...emptyDashboardOverview.tasks,
+      ...data.tasks,
+    },
+    transactions: Array.isArray(data.transactions) ? data.transactions : emptyDashboardOverview.transactions,
+    notifications: Array.isArray(data.notifications) ? data.notifications : emptyDashboardOverview.notifications,
+    reputation: {
+      ...emptyDashboardOverview.reputation,
+      ...data.reputation,
+    },
+    activeTasks: Array.isArray(data.activeTasks) ? data.activeTasks : emptyDashboardOverview.activeTasks,
+  }
+}
+
+function getDashboardOverviewResponse(payload: DashboardOverviewPayload | null): DashboardOverviewResponse {
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return (payload as { data?: DashboardOverviewResponse | null }).data ?? {}
+  }
+
+  return (payload ?? {}) as DashboardOverviewResponse
+}
+
+function getEarningsResponse(payload: unknown): Partial<DashboardEarnings> {
+  if (Array.isArray(payload)) return { chart: payload }
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return ((payload as { data?: Partial<DashboardEarnings> | null }).data ?? {}) as Partial<DashboardEarnings>
+  }
+  if (payload && typeof payload === "object" && "earnings" in payload) {
+    return ((payload as { earnings?: Partial<DashboardEarnings> | null }).earnings ?? {}) as Partial<DashboardEarnings>
+  }
+  return (payload ?? {}) as Partial<DashboardEarnings>
+}
+
+function mergeEarnings(current: DashboardEarnings, next: Partial<DashboardEarnings>): DashboardEarnings {
+  const chart = Array.isArray(next.chart)
+    ? next.chart.map((point) => ({
+        date: String(point?.date || ""),
+        earnings: toSats(point?.earnings),
+      }))
+    : current.chart
+
+  return {
+    ...current,
+    ...next,
+    chart,
+  }
+}
+
+function sumEarnings(points: EarningsPoint[]) {
+  return points.reduce((sum, point) => sum + toSats(point.earnings), 0)
+}
+
+function readWeeklyEarningsStats(earnings: DashboardEarnings) {
+  const explicitThisWeek =
+    toOptionalNumber(earnings.thisWeek) ??
+    toOptionalNumber(earnings.currentWeek) ??
+    toOptionalNumber(earnings.weeklyEarnings) ??
+    toOptionalNumber(earnings.weekTotal)
+  const explicitLastWeek =
+    toOptionalNumber(earnings.lastWeek) ??
+    toOptionalNumber(earnings.previousWeek) ??
+    toOptionalNumber(earnings.previousWeekEarnings)
+  const explicitPercent =
+    toOptionalNumber(earnings.weekOverWeekPercent) ??
+    toOptionalNumber(earnings.weeklyGrowthPercent) ??
+    toOptionalNumber(earnings.growthPercent)
+
+  const chart = earnings.chart
+  const thisWeek = explicitThisWeek ?? sumEarnings(chart.slice(-7))
+  const lastWeek = explicitLastWeek ?? (chart.length >= 14 ? sumEarnings(chart.slice(-14, -7)) : null)
+  const percent =
+    explicitPercent ??
+    (lastWeek === null
+      ? null
+      : lastWeek === 0
+      ? thisWeek > 0
+        ? 100
+        : 0
+      : ((thisWeek - lastWeek) / lastWeek) * 100)
+
+  return { thisWeek, lastWeek, percent }
+}
+
 export default function DashboardPage() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -104,8 +336,23 @@ export default function DashboardPage() {
       try {
         const res = await fetch("/api/dashboard", { cache: "no-store" })
         if (!res.ok) throw new Error("Failed to load dashboard")
-        const data = await res.json()
-        setOverview(data)
+        const data = (await res.json()) as DashboardOverviewPayload | null
+        const nextOverview = normalizeDashboardOverview(getDashboardOverviewResponse(data))
+
+        const [balanceRes, earningsRes] = await Promise.all([
+          fetch("/api/wallet/balance", { cache: "no-store" }),
+          fetch("/api/dashboard/earnings", { cache: "no-store" }),
+        ])
+        const balanceData = balanceRes.ok ? ((await balanceRes.json().catch(() => null)) as WalletBalancePayload | null) : null
+        if (hasWalletBalanceFields(balanceData)) {
+          nextOverview.wallet = readWalletBalance(balanceData)
+        }
+        if (earningsRes.ok) {
+          const earningsData = await earningsRes.json().catch(() => null)
+          nextOverview.earnings = mergeEarnings(nextOverview.earnings, getEarningsResponse(earningsData))
+        }
+
+        setOverview(nextOverview)
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }
@@ -115,7 +362,7 @@ export default function DashboardPage() {
   }, [])
 
   const unreadNotifications = useMemo(
-    () => overview?.notifications.filter((n) => !n.read).slice(0, 5) ?? [],
+    () => (overview?.notifications ?? []).filter((n) => !n.read).slice(0, 5),
     [overview],
   )
 
@@ -124,6 +371,9 @@ export default function DashboardPage() {
   const totalBalance = overview
     ? overview.wallet.availableBalance + overview.wallet.pendingBalance + overview.wallet.lockedBalance
     : 0
+  const weeklyEarnings = readWeeklyEarningsStats(overview?.earnings ?? emptyDashboardOverview.earnings)
+  const weeklyTrendPositive = (weeklyEarnings.percent ?? 0) >= 0
+  const WeeklyTrendIcon = weeklyTrendPositive ? TrendingUp : TrendingDown
 
   const getNotificationTitle = (type: string) => {
     switch (type) {
@@ -193,7 +443,7 @@ export default function DashboardPage() {
             </div>
             <CardHeader className="pb-2">
               <CardDescription>Total Balance</CardDescription>
-              <CardTitle className="text-2xl font-mono">{formatBsv(totalBalance)}</CardTitle>
+              <CardTitle className="text-2xl font-mono">{formatBsvFromSats(totalBalance)}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground">Available + pending + locked</p>
@@ -207,13 +457,29 @@ export default function DashboardPage() {
             <CardHeader className="pb-2">
               <CardDescription>This Week</CardDescription>
               <CardTitle className="text-2xl font-mono text-emerald-500">
-                +{formatBsv(overview?.earnings.chart.reduce((a, b) => a + b.earnings, 0) ?? 0)}
+                +{formatBsvFromSats(weeklyEarnings.thisWeek)}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-1 text-xs text-emerald-500">
-                <TrendingUp className="h-3 w-3" />
-                <span>+23% from last week</span>
+              <div
+                className={`flex items-center gap-1 text-xs ${
+                  weeklyEarnings.percent === null
+                    ? "text-muted-foreground"
+                    : weeklyTrendPositive
+                    ? "text-emerald-500"
+                    : "text-destructive"
+                }`}
+              >
+                {weeklyEarnings.percent === null ? (
+                  <Clock className="h-3 w-3" />
+                ) : (
+                  <WeeklyTrendIcon className="h-3 w-3" />
+                )}
+                <span>
+                  {weeklyEarnings.percent === null
+                    ? "No last week data"
+                    : `${weeklyTrendPositive ? "+" : ""}${weeklyEarnings.percent.toFixed(1)}% from last week`}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -278,7 +544,7 @@ export default function DashboardPage() {
                         stroke="hsl(var(--muted-foreground))"
                         fontSize={12}
                         tickLine={false}
-                        tickFormatter={(value) => `${Number(value).toFixed(4)} BSV`}
+                        tickFormatter={(value) => formatBsvFromSats(Number(value)).replace(" BSV", "")}
                       />
                       <Tooltip
                         contentStyle={{
@@ -286,7 +552,7 @@ export default function DashboardPage() {
                           border: "1px solid hsl(var(--border))",
                           borderRadius: "8px",
                         }}
-                        formatter={(value: number) => [formatBsv(value), "Earnings"]}
+                        formatter={(value: number) => [formatBsvFromSats(value), "Earnings"]}
                       />
                       <Area
                         type="monotone"
@@ -451,7 +717,7 @@ export default function DashboardPage() {
                             : 'text-bitcoin-500'
                         }`}>
                           {tx.type === 'deposit' || tx.type === 'payout' ? '+' : '-'}
-                          {formatBsv(tx.amount)}
+                          {formatBsvFromSats(tx.amount)}
                         </p>
                         <Badge
                           variant={tx.status === 'confirmed' || tx.status === 'completed' ? 'success' : 'warning'}

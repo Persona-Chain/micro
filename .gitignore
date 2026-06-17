@@ -1,6 +1,14 @@
 node_modules/
 .next/
-dev.db
-dev.db-journal
-.env.local
+backend/dist/
+dist/
 
+*.tsbuildinfo
+*.log
+*.db
+*.db-journal
+*.webp
+
+.env
+.env.local
+backend/.env

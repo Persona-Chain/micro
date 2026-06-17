@@ -26,17 +26,11 @@ A modern, premium Bitcoin-powered micro-freelancing platform built with Next.js 
 # Install dependencies
 npm install
 
-# Create SQLite DB file (required for Prisma SQLite on Windows)
-# PowerShell:
-New-Item -ItemType File -Path .\\dev.db -Force
-# (or mac/linux)
-# touch dev.db
-
-# Set up local SQLite DB
-npx prisma migrate dev
-
-# Optional: seed test users
-npm run db:seed
+# Configure the external BountyBee backend
+BOUNTYBEE_API_URL=http://127.0.0.1:8081
+AUTH_API_URL=http://127.0.0.1:8081
+AUTH_SERVICE_KEY=shared-service-key
+JWT_SECRET=next-cookie-secret
 
 # Run development server
 npm run dev
@@ -45,9 +39,18 @@ npm run dev
 npm run build
 ```
 
-## Authentication Backend
+## External Backend
 
-API routes (Next.js App Router):
+The Next.js app proxies application data to the external BountyBee backend under `/api/v1/*`.
+
+Required environment variables:
+
+- `BOUNTYBEE_API_URL`
+- `AUTH_API_URL`
+- `AUTH_SERVICE_KEY`
+- `JWT_SECRET`
+
+Local API routes (Next.js App Router):
 
 - `POST /api/auth/register`
 - `GET /api/auth/verify-email?token=TOKEN`
@@ -57,11 +60,9 @@ API routes (Next.js App Router):
 - `POST /api/auth/forgot-password`
 - `POST /api/auth/reset-password`
 
-Dev note: email verification + password reset links are logged to the server console (no external email service needed).
+## Wallet Backend
 
-## Wallet Backend (BSV mainnet)
-
-Non-custodial keys are generated per-user and stored encrypted in SQLite.
+Wallet, balances, transactions, paymail, tasks, messages, notifications, profile data, escrow, disputes, and admin analytics are stored in the external backend, not in a local SQLite database.
 
 Endpoints:
 
@@ -74,11 +75,14 @@ Endpoints:
 - `GET /api/wallet/deposits`
 - `GET /api/wallet/withdrawals`
 - `GET /api/wallet/history`
+- `POST /api/wallet/withdraw/quote`
+- `POST /api/wallet/withdraw/broadcast`
 
 Notes:
 
-- Uses WhatsOnChain for UTXO lookup + broadcasting (no custody, just a public API). Set `WHATSONCHAIN_API_KEY` for higher rate limits.
-- `WALLET_MASTER_KEY` encrypts private keys at rest (AES-256-GCM). Change it in production.
+- BSV private keys are not stored in this Next.js app.
+- For real on-chain withdrawals/payouts, use the client-signed quote/broadcast flow.
+- The external backend stores accounting, task, escrow, transaction, and notification records.
 
 ## Project Structure
 

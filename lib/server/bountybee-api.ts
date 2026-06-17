@@ -26,6 +26,16 @@ export type ExternalUsersMeResponse = {
   }
 }
 
+export class BountyBeeApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "BountyBeeApiError"
+    this.status = status
+  }
+}
+
 function getBountyBeeApiConfig() {
   const baseUrl = (
     process.env.BOUNTYBEE_API_URL ||
@@ -53,11 +63,12 @@ function withQuery(url: string, query?: ApiRequestOptions["query"]) {
 export async function bountyBeeApiFetch<T = unknown>(path: string, options: ApiRequestOptions = {}) {
   const { baseUrl, serviceKey } = getBountyBeeApiConfig()
   const headers: Record<string, string> = {
+    Accept: "application/json",
     "Content-Type": "application/json",
   }
 
   if (options.token) headers.Authorization = `Bearer ${options.token}`
-  if (options.service) {
+  if (options.service || serviceKey) {
     if (!serviceKey) throw new Error("Missing AUTH_SERVICE_KEY or BOUNTYBEE_SERVICE_KEY in environment")
     headers["X-Service-Key"] = serviceKey
   }
@@ -71,7 +82,7 @@ export async function bountyBeeApiFetch<T = unknown>(path: string, options: ApiR
 
   const data = (await res.json().catch(() => null)) as any
   if (!res.ok || data?.success === false) {
-    throw new Error(data?.message || `BountyBee API request failed: ${path}`)
+    throw new BountyBeeApiError(data?.message || `BountyBee API request failed: ${path}`, res.status)
   }
   return data as T
 }

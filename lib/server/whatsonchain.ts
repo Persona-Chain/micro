@@ -11,6 +11,43 @@ type ChainInfo = {
   blocks: number
 }
 
+type WocAddressHistoryItem = {
+  tx_hash: string
+  height?: number
+}
+
+type WocAddressHistory = {
+  result?: WocAddressHistoryItem[]
+  error?: string
+}
+
+type WocTransactionInput = {
+  address?: string
+  txid?: string
+  vout?: number
+  coinbase?: string
+}
+
+type WocTransactionOutput = {
+  value?: number
+  n?: number
+  scriptPubKey?: {
+    address?: string
+    addresses?: string[]
+  }
+}
+
+export type WocTransaction = {
+  txid: string
+  hash?: string
+  vin?: WocTransactionInput[]
+  vout?: WocTransactionOutput[]
+  confirmations?: number
+  time?: number
+  blocktime?: number
+  blockheight?: number
+}
+
 function getBaseUrl() {
   // BSV mainnet
   return "https://api.whatsonchain.com/v1/bsv/main"
@@ -103,6 +140,31 @@ export async function getUnconfirmedUtxos(address: string) {
     if (e?.code === "WOC_NOT_FOUND" || e?.message === "WOC_NOT_FOUND") return []
     throw e
   }
+}
+
+export async function getConfirmedAddressHistory(address: string, limit = 20) {
+  try {
+    const params = new URLSearchParams({ limit: String(limit), order: "desc" })
+    const data = await wocGetJson<WocAddressHistory>(`/address/${address}/confirmed/history?${params}`)
+    return Array.isArray(data.result) ? data.result : []
+  } catch (e: any) {
+    if (e?.code === "WOC_NOT_FOUND" || e?.message === "WOC_NOT_FOUND") return []
+    throw e
+  }
+}
+
+export async function getUnconfirmedAddressHistory(address: string) {
+  try {
+    const data = await wocGetJson<WocAddressHistory>(`/address/${address}/unconfirmed/history`)
+    return Array.isArray(data.result) ? data.result : []
+  } catch (e: any) {
+    if (e?.code === "WOC_NOT_FOUND" || e?.message === "WOC_NOT_FOUND") return []
+    throw e
+  }
+}
+
+export async function getTransaction(txid: string) {
+  return wocGetJson<WocTransaction>(`/tx/hash/${txid}`)
 }
 
 export async function broadcastRawTx(txhex: string) {

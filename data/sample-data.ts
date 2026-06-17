@@ -13,8 +13,7 @@ export const currentUser: User = {
   joinedAt: '2024-03-15T10:00:00Z',
   isVerified: true,
   role: 'user',
-  walletAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-  lightningAddress: 'satoshi@bountybee.io',
+  walletAddress: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
 }
 
 export const users: User[] = [
@@ -32,7 +31,6 @@ export const users: User[] = [
     joinedAt: '2024-01-10T08:00:00Z',
     isVerified: true,
     role: 'user',
-    lightningAddress: 'hal@bountybee.io',
   },
   {
     id: 'user-3',
@@ -47,7 +45,6 @@ export const users: User[] = [
     joinedAt: '2024-02-20T14:00:00Z',
     isVerified: true,
     role: 'user',
-    lightningAddress: 'nick@bountybee.io',
   },
   {
     id: 'user-4',
@@ -62,7 +59,6 @@ export const users: User[] = [
     joinedAt: '2024-03-01T09:00:00Z',
     isVerified: true,
     role: 'user',
-    lightningAddress: 'adam@bountybee.io',
   },
   {
     id: 'user-5',
@@ -77,7 +73,6 @@ export const users: User[] = [
     joinedAt: '2024-04-05T11:00:00Z',
     isVerified: true,
     role: 'user',
-    lightningAddress: 'gavin@bountybee.io',
   },
   {
     id: 'user-6',
@@ -92,7 +87,6 @@ export const users: User[] = [
     joinedAt: '2023-12-01T07:00:00Z',
     isVerified: true,
     role: 'user',
-    lightningAddress: 'andreas@bountybee.io',
   },
 ]
 
@@ -332,7 +326,7 @@ export const transactions: Transaction[] = [
     amount: 200000,
     currency: 'sats',
     status: 'completed',
-    to: 'bc1q...wlh',
+    to: '1A1z...vfNa',
     description: 'Withdrawal to on-chain wallet',
     createdAt: '2026-05-10T14:00:00Z',
     txHash: 'jkl901mno234',
@@ -372,8 +366,8 @@ export const transactions: Transaction[] = [
     amount: 150000,
     currency: 'sats',
     status: 'pending',
-    to: 'satoshi@bountybee.io',
-    description: 'Lightning withdrawal',
+    to: '16Uw...MtjvM',
+    description: 'BSV withdrawal',
     createdAt: '2026-05-29T20:00:00Z',
   },
 ]

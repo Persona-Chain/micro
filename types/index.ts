@@ -19,7 +19,6 @@ export interface User {
   isVerified: boolean
   role: 'user' | 'admin' | 'moderator'
   walletAddress?: string
-  lightningAddress?: string
 }
 
 export interface Task {

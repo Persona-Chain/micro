@@ -18,7 +18,6 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -39,17 +38,165 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 }
 
-type PaymailLookup = {
-  exists: boolean
-  isSelf?: boolean
-  message?: string
-  recipient?: {
-    username: string
-    paymail: string
-    displayName: string
-    avatarUrl?: string | null
-    address: string
+function isLikelyBsvAddress(value: string) {
+  return /^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(value.trim())
+}
+
+type WalletBalancePayload = {
+  availableBalance?: number | string | null
+  pendingBalance?: number | string | null
+  reservedBalance?: number | string | null
+  confirmedBalance?: number | string | null
+  unconfirmedBalance?: number | string | null
+  totalBalance?: number | string | null
+  balanceSats?: number | string | null
+  sats?: number | string | null
+  balance?: WalletBalancePayload | number | string | null
+  balances?: WalletBalancePayload | null
+  data?: WalletBalancePayload | null
+  wallet?: WalletBalancePayload | null
+}
+
+type WalletTransaction = {
+  txid: string
+  type: string
+  amount: number
+  fee?: number | null
+  confirmations: number
+  status: string
+  address: string
+  createdAt: string
+}
+
+type WalletHistoryPayload = {
+  transactions?: unknown
+  recentTransactions?: unknown
+  history?: unknown
+  items?: unknown
+  data?: unknown
+  result?: unknown
+  wallet?: unknown
+}
+
+function toSats(value: unknown) {
+  const sats = Number(value || 0)
+  return Number.isFinite(sats) ? sats : 0
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object")
+}
+
+function isWalletBalancePayload(value: unknown): value is WalletBalancePayload {
+  return Boolean(value && typeof value === "object")
+}
+
+function unwrapWalletBalancePayload(data: WalletBalancePayload | null): WalletBalancePayload {
+  if (!data) return {}
+  if (isWalletBalancePayload(data.data)) return unwrapWalletBalancePayload(data.data)
+  if (isWalletBalancePayload(data.wallet)) return unwrapWalletBalancePayload(data.wallet)
+  if (isWalletBalancePayload(data.balances)) return unwrapWalletBalancePayload(data.balances)
+  if (isWalletBalancePayload(data.balance)) return unwrapWalletBalancePayload(data.balance)
+  return data
+}
+
+function readWalletBalances(data: WalletBalancePayload | null) {
+  const source = unwrapWalletBalancePayload(data)
+  const confirmed =
+    source.availableBalance ??
+    source.confirmedBalance ??
+    source.balanceSats ??
+    source.sats ??
+    (typeof source.balance === "number" || typeof source.balance === "string" ? source.balance : undefined)
+  const pending = source.pendingBalance ?? source.unconfirmedBalance
+  return {
+    confirmed: confirmed !== undefined ? toSats(confirmed) : toSats(source.totalBalance),
+    pending: toSats(pending),
   }
+}
+
+function hasWalletBalanceFields(data: WalletBalancePayload | null) {
+  const source = unwrapWalletBalancePayload(data)
+  if (!source) return false
+  return (
+    source.availableBalance !== undefined ||
+    source.pendingBalance !== undefined ||
+    source.reservedBalance !== undefined ||
+    source.confirmedBalance !== undefined ||
+    source.unconfirmedBalance !== undefined ||
+    source.totalBalance !== undefined ||
+    source.balanceSats !== undefined ||
+    source.sats !== undefined ||
+    typeof source.balance === "number" ||
+    typeof source.balance === "string"
+  )
+}
+
+function unwrapWalletHistoryPayload(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data
+  if (!isRecord(data)) return []
+
+  const payload = data as WalletHistoryPayload
+  const candidates = [
+    payload.transactions,
+    payload.recentTransactions,
+    payload.history,
+    payload.items,
+    payload.data,
+    payload.result,
+    payload.wallet,
+  ]
+
+  for (const candidate of candidates) {
+    const transactions = unwrapWalletHistoryPayload(candidate)
+    if (transactions.length) return transactions
+  }
+
+  return []
+}
+
+function normalizeTransactionType(value: unknown) {
+  const type = String(value || "").toLowerCase()
+  if (["received", "receive", "incoming", "in"].includes(type)) return "deposit"
+  if (["sent", "send", "outgoing", "out"].includes(type)) return "withdrawal"
+  return type || "transaction"
+}
+
+function normalizeWalletTransaction(value: unknown, index: number): WalletTransaction | null {
+  if (!isRecord(value)) return null
+
+  const nested = isRecord(value.transaction) ? value.transaction : {}
+  const source = { ...value, ...nested }
+  const amount = Math.abs(toSats(source.amount ?? source.amountSats ?? source.satoshis ?? source.value ?? source.valueSats))
+  if (amount <= 0) return null
+
+  const txid = String(source.txid ?? source.txId ?? source.hash ?? source.id ?? `transaction-${index}`)
+  const address = String(
+    source.address ??
+      source.toAddress ??
+      source.fromAddress ??
+      source.destinationAddress ??
+      source.senderAddress ??
+      source.receiverAddress ??
+      "",
+  )
+
+  return {
+    txid,
+    type: normalizeTransactionType(source.type ?? source.direction ?? source.kind),
+    amount,
+    fee: source.fee === undefined || source.fee === null ? null : toSats(source.fee),
+    confirmations: toSats(source.confirmations),
+    status: String(source.status || "completed").toLowerCase(),
+    address,
+    createdAt: String(source.createdAt ?? source.created_at ?? source.timestamp ?? source.time ?? new Date().toISOString()),
+  }
+}
+
+function readWalletTransactions(data: unknown) {
+  return unwrapWalletHistoryPayload(data)
+    .map((tx, index) => normalizeWalletTransaction(tx, index))
+    .filter((tx): tx is WalletTransaction => Boolean(tx))
 }
 
 export default function WalletPage() {
@@ -60,7 +207,7 @@ export default function WalletPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [lightningCopied, setLightningCopied] = useState(false)
+  const [depositAddressCopied, setDepositAddressCopied] = useState(false)
   const [depositAddress, setDepositAddress] = useState<string>("")
   const [isLoadingDepositAddress, setIsLoadingDepositAddress] = useState(false)
   const [depositAddressError, setDepositAddressError] = useState("")
@@ -68,12 +215,9 @@ export default function WalletPage() {
   const [pendingBalance, setPendingBalance] = useState(0)
   const [bsvPriceUsd, setBsvPriceUsd] = useState<number | null>(null)
   const [isLoadingBalances, setIsLoadingBalances] = useState(false)
-  const [paymailAddress, setPaymailAddress] = useState<string>("")
-  const [paymailLookup, setPaymailLookup] = useState<PaymailLookup | null>(null)
-  const [isResolvingPaymail, setIsResolvingPaymail] = useState(false)
   const [withdrawError, setWithdrawError] = useState("")
   const [withdrawSuccess, setWithdrawSuccess] = useState("")
-  const [transactions, setTransactions] = useState<Array<{ txid: string; type: string; amount: number; fee?: number | null; confirmations: number; status: string; address: string; createdAt: string }>>([])
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([])
 
   const totalBalance = confirmedBalance + pendingBalance
 
@@ -84,14 +228,12 @@ export default function WalletPage() {
     return `$${usd.toFixed(2)}`
   }
 
-  async function copyLightningAddress() {
-    if (await copyText(paymailAddress || "")) {
-      setLightningCopied(true)
-      setTimeout(() => setLightningCopied(false), 2000)
+  async function copyDepositAddress() {
+    if (await copyText(depositAddress || "")) {
+      setDepositAddressCopied(true)
+      setTimeout(() => setDepositAddressCopied(false), 2000)
     }
   }
-
-  const isPaymailDestination = withdrawAddress.trim().includes("@")
 
   async function handleDeposit() {
     if (!depositAddress) {
@@ -116,8 +258,14 @@ export default function WalletPage() {
     setWithdrawSuccess("")
 
     const amount = Number(withdrawAmount)
-    if (!withdrawAddress.trim()) {
-      setWithdrawError("Enter a destination address or paymail.")
+    const destinationAddress = withdrawAddress.trim()
+    if (!destinationAddress) {
+      setWithdrawError("Enter a destination BSV address.")
+      return
+    }
+
+    if (!isLikelyBsvAddress(destinationAddress)) {
+      setWithdrawError("Enter a valid on-chain BSV address that starts with 1.")
       return
     }
 
@@ -131,23 +279,27 @@ export default function WalletPage() {
       const res = await fetch("/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: withdrawAddress.trim(), amount }),
+        body: JSON.stringify({ address: destinationAddress, amount }),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) {
         throw new Error(data?.message || "Withdrawal failed.")
       }
+      const txid = data?.txid || data?.transaction?.txid || data?.withdrawal?.txid
       setWithdrawSuccess(
-        data?.type === "paymail_transfer" && data?.recipient?.paymail
-          ? `Payment sent to ${data.recipient.paymail}. It will appear after the BSV transaction confirms.`
-          : "Withdrawal request sent. Check your transaction history for updates."
+        txid
+          ? `Withdrawal broadcast. Transaction ID: ${txid}`
+          : "Withdrawal accepted. Waiting for broadcast confirmation.",
       )
       setWithdrawAddress("")
       setWithdrawAmount("")
-      setPaymailLookup(null)
+      setIsLoadingBalances(true)
+      await syncAndLoadBalance()
+      await loadWalletHistory()
     } catch (e) {
       setWithdrawError(e instanceof Error ? e.message : "Withdrawal failed.")
     } finally {
+      setIsLoadingBalances(false)
       setIsProcessing(false)
     }
   }
@@ -184,16 +336,38 @@ export default function WalletPage() {
     }
   }
 
+  function applyWalletBalances(data: WalletBalancePayload | null) {
+    const balances = readWalletBalances(data)
+    setConfirmedBalance(balances.confirmed)
+    setPendingBalance(balances.pending)
+  }
+
+  async function syncAndLoadBalance() {
+    const syncRes = await fetch("/api/wallet/sync", { method: "POST" })
+    const syncData = syncRes.ok ? ((await syncRes.json().catch(() => null)) as WalletBalancePayload | null) : null
+
+    const balanceRes = await fetch("/api/wallet/balance", { cache: "no-store" })
+    const balanceData = balanceRes.ok ? ((await balanceRes.json().catch(() => null)) as WalletBalancePayload | null) : null
+
+    applyWalletBalances(hasWalletBalanceFields(balanceData) ? balanceData : syncData)
+  }
+
+  async function loadWalletHistory() {
+    const historyRes = await fetch("/api/wallet/history", { cache: "no-store" })
+    if (!historyRes.ok) return
+
+    const historyData = await historyRes.json().catch(() => null)
+    setTransactions(readWalletTransactions(historyData))
+  }
+
   useEffect(() => {
     loadDepositAddress()
 
     ;(async () => {
       setIsLoadingBalances(true)
       try {
-        const [priceRes, syncRes, authRes, historyRes] = await Promise.all([
+        const [priceRes, historyRes] = await Promise.all([
           fetch("/api/market/bsv-price", { method: "GET" }),
-          fetch("/api/wallet/sync", { method: "POST" }),
-          fetch("/api/auth/me", { cache: "no-store" }),
           fetch("/api/wallet/history", { cache: "no-store" }),
         ])
 
@@ -203,23 +377,11 @@ export default function WalletPage() {
           if (Number.isFinite(usd) && usd > 0) setBsvPriceUsd(usd)
         }
 
-        if (syncRes.ok) {
-          const syncData = await syncRes.json().catch(() => null)
-          setConfirmedBalance(Number(syncData?.availableBalance || 0))
-          setPendingBalance(Number(syncData?.pendingBalance || 0))
-        }
-
-        if (authRes.ok) {
-          const authData = await authRes.json().catch(() => null)
-          const usernameValue = authData?.user?.username || ""
-          if (usernameValue) setPaymailAddress(`${usernameValue}@bountybee.io`)
-        }
+        await syncAndLoadBalance()
 
         if (historyRes.ok) {
           const historyData = await historyRes.json().catch(() => null)
-          if (Array.isArray(historyData)) {
-            setTransactions(historyData)
-          }
+          setTransactions(readWalletTransactions(historyData))
         }
       } finally {
         setIsLoadingBalances(false)
@@ -228,41 +390,6 @@ export default function WalletPage() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    const value = withdrawAddress.trim()
-    if (!value.includes("@")) {
-      setPaymailLookup(null)
-      setIsResolvingPaymail(false)
-      return
-    }
-
-    const controller = new AbortController()
-    const timeout = window.setTimeout(async () => {
-      setIsResolvingPaymail(true)
-      try {
-        const res = await fetch(`/api/wallet/paymail/resolve?paymail=${encodeURIComponent(value)}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        })
-        const data = await res.json().catch(() => null)
-        if (!controller.signal.aborted) {
-          setPaymailLookup(data)
-        }
-      } catch {
-        if (!controller.signal.aborted) {
-          setPaymailLookup({ exists: false, message: "Could not verify this paymail yet." })
-        }
-      } finally {
-        if (!controller.signal.aborted) setIsResolvingPaymail(false)
-      }
-    }, 350)
-
-    return () => {
-      controller.abort()
-      window.clearTimeout(timeout)
-    }
-  }, [withdrawAddress])
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -363,20 +490,20 @@ export default function WalletPage() {
                   </CardContent>
                 </Card>
 
-                {/* Paymail Address */}
+                {/* BSV Deposit Address */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Paymail Address</CardTitle>
-                    <CardDescription>Receive payments instantly</CardDescription>
+                    <CardTitle>BSV Deposit Address</CardTitle>
+                    <CardDescription>Receive on-chain BSV payments</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
                       <Zap className="h-4 w-4 text-bitcoin-500 shrink-0" />
                       <code className="text-sm font-mono flex-1 truncate">
-                        {paymailAddress || "username@bountybee.io"}
+                        {isLoadingDepositAddress ? "Loadingâ€¦" : depositAddress || "â€”"}
                       </code>
-                      <Button variant="ghost" size="icon-sm" onClick={copyLightningAddress}>
-                        {lightningCopied ? (
+                      <Button variant="ghost" size="icon-sm" onClick={copyDepositAddress} disabled={!depositAddress}>
+                        {depositAddressCopied ? (
                           <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                         ) : (
                           <Copy className="h-4 w-4" />
@@ -384,7 +511,7 @@ export default function WalletPage() {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Share this address to receive Lightning payments directly to your wallet.
+                      Share this BSV address to receive on-chain payments directly to your wallet.
                     </p>
                   </CardContent>
                 </Card>
@@ -504,7 +631,7 @@ export default function WalletPage() {
                         onClick={async () => {
                           setIsProcessing(true)
                           try {
-                            await fetch("/api/wallet/sync", { method: "POST" })
+                            await syncAndLoadBalance()
                           } finally {
                             setIsProcessing(false)
                           }
@@ -611,8 +738,8 @@ export default function WalletPage() {
               <div className="max-w-lg mx-auto">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Withdraw Bitcoin</CardTitle>
-                    <CardDescription>Send Bitcoin to an external wallet</CardDescription>
+                    <CardTitle>Withdraw Bitcoin-SV</CardTitle>
+                    <CardDescription>Send BSV to an external on-chain wallet</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {withdrawError ? (
@@ -627,57 +754,16 @@ export default function WalletPage() {
                     ) : null}
 
                     <div className="space-y-2">
-                      <Label htmlFor="withdraw-address">Destination Address or Paymail</Label>
+                      <Label htmlFor="withdraw-address">Destination BSV Address</Label>
                       <Input
                         id="withdraw-address"
-                        placeholder="satoshi@bountybee.io or 1A1zP1..."
+                        placeholder="1A1zP1..."
                         value={withdrawAddress}
                         onChange={(e) => setWithdrawAddress(e.target.value)}
                       />
-                      {isPaymailDestination ? (
-                        <div
-                          className={cn(
-                            "rounded-lg border p-3 text-sm transition-colors",
-                            paymailLookup?.exists
-                              ? "border-emerald-500/30 bg-emerald-500/10"
-                              : "border-amber-500/30 bg-amber-500/10"
-                          )}
-                        >
-                          {isResolvingPaymail ? (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <div className="h-4 w-4 rounded-full border-2 border-bitcoin-500/30 border-t-bitcoin-500 animate-spin" />
-                              Verifying paymail…
-                            </div>
-                          ) : paymailLookup?.exists && paymailLookup.recipient ? (
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-9 w-9">
-                                {paymailLookup.recipient.avatarUrl ? (
-                                  <AvatarImage src={paymailLookup.recipient.avatarUrl} />
-                                ) : null}
-                                <AvatarFallback>
-                                  {paymailLookup.recipient.displayName.slice(0, 1).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-medium">{paymailLookup.recipient.displayName}</span>
-                                  <Badge variant={paymailLookup.isSelf ? "warning" : "success"} className="text-[10px]">
-                                    {paymailLookup.isSelf ? "Your paymail" : "Paymail found"}
-                                  </Badge>
-                                </div>
-                                <p className="truncate text-xs text-muted-foreground">
-                                  Sends on-chain BSV to {paymailLookup.recipient.address}
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
-                              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                              <span>{paymailLookup?.message || "No BountyBee user found for this paymail."}</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
+                      <p className="text-xs text-muted-foreground">
+                        Use a legacy on-chain BSV address. Paymail, CashAddr, BTC SegWit, and Hatch addresses are not accepted.
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -712,9 +798,7 @@ export default function WalletPage() {
                         <div>
                           <p className="text-sm font-medium">Network Fee</p>
                           <p className="text-xs text-muted-foreground">
-                            {isPaymailDestination
-                              ? "Paymail is resolved to the user’s BSV address, then sent on-chain with a network fee."
-                              : "A small network fee may apply. Withdrawals are processed by the wallet backend."}
+                            A small BSV network fee may apply. Withdrawals are processed by the wallet backend.
                           </p>
                         </div>
                       </div>
@@ -726,8 +810,7 @@ export default function WalletPage() {
                       disabled={
                         isProcessing ||
                         !withdrawAmount ||
-                        !withdrawAddress ||
-                        (isPaymailDestination && (!paymailLookup?.exists || paymailLookup?.isSelf))
+                        !isLikelyBsvAddress(withdrawAddress)
                       }
                     >
                       {isProcessing ? (

@@ -87,7 +87,6 @@ export default function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
-  const [depositAddress, setDepositAddress] = useState<string>("")
   const [walletAddress, setWalletAddress] = useState<string>("")
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -138,7 +137,6 @@ export default function SettingsPage() {
 
   const username = user?.username || profile?.username || ""
   const email = user?.email || ""
-  const paymail = username ? `${username}@bountybee.io` : ""
 
   async function handleProfileSave() {
     if (!profile) return
@@ -534,21 +532,7 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Paymail Address</Label>
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
-                      <code className="text-sm font-mono flex-1 truncate">{paymail || "-"}</code>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => copyText(paymail)}
-                        disabled={!paymail}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>On-Chain Address</Label>
+                    <Label>BSV On-Chain Address</Label>
                     <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
                       <code className="text-sm font-mono flex-1 truncate">{walletAddress || "-"}</code>
                       <Button

@@ -45,6 +45,28 @@ const steps = [
 const difficulties = ["easy", "medium", "hard", "expert"] as const
 const FALLBACK_BSV_PRICE_USD = 40
 
+function readCategories(data: any): Array<{ id: number; name: string }> {
+  const items = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.categories)
+    ? data.categories
+    : Array.isArray(data?.data)
+    ? data.data
+    : []
+
+  return items
+    .map((c: any) => ({ id: Number(c?.id), name: String(c?.name || "") }))
+    .filter((c: any) => Number.isFinite(c.id) && c.name)
+}
+
+function sameCategoryName(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
+function findCategory(categories: Array<{ id: number; name: string }>, name: string) {
+  return categories.find((c) => sameCategoryName(c.name, name))
+}
+
 function CreateTaskContent() {
   const searchParams = useSearchParams()
   const editTaskId = searchParams.get("edit")
@@ -138,7 +160,7 @@ function CreateTaskContent() {
         const data = await res.json().catch(() => null)
         if (cancelled) return
         if (!res.ok) throw new Error(data?.message || "Failed to create draft task")
-        setTaskId(Number(data?.taskId))
+        setTaskId(Number(data?.taskId ?? data?.task?.id))
       } catch (e) {
         if (cancelled) return
         setApiError(e instanceof Error ? e.message : "Failed to create draft task")
@@ -177,12 +199,8 @@ function CreateTaskContent() {
         const res = await fetch("/api/categories", { method: "GET" })
         const data = await res.json().catch(() => null)
         if (cancelled) return
-        if (!res.ok || !Array.isArray(data)) return
-        setDbCategories(
-          data
-            .map((c: any) => ({ id: Number(c?.id), name: String(c?.name || "") }))
-            .filter((c: any) => Number.isFinite(c.id) && c.name),
-        )
+        if (!res.ok) return
+        setDbCategories(readCategories(data))
       } catch {
         // Silent fallback: UI can still render sample categories; we only need numeric ids for the API.
       }
@@ -230,22 +248,67 @@ function CreateTaskContent() {
     return messages
   }
 
+  async function createDraftTask() {
+    const res = await fetch("/api/tasks/draft", { method: "POST" })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) throw new Error(data?.message || "Failed to create draft task")
+
+    const nextTaskId = Number(data?.taskId ?? data?.task?.id)
+    if (!Number.isFinite(nextTaskId)) throw new Error("Draft task response was missing a task ID")
+    setTaskId(nextTaskId)
+    return nextTaskId
+  }
+
+  function validateStepForNavigation(step: number) {
+    const messages: string[] = []
+
+    if (step === 1) {
+      if (formData.title.trim().length < 10) messages.push("Title must be at least 10 characters.")
+      if (!formData.category) messages.push("Please select a category.")
+    }
+
+    if (step === 2) {
+      if (formData.description.trim().length < 20) messages.push("Description must be at least 20 characters.")
+      if (formData.requirements.trim().length < 10) messages.push("Requirements must be at least 10 characters.")
+    }
+
+    if (step === 3) {
+      if (!Number.isInteger(Number(formData.reward)) || Number(formData.reward) <= 0) {
+        messages.push("Reward must be a positive number of sats.")
+      }
+      if (!Number.isInteger(Number(formData.maxApplicants)) || Number(formData.maxApplicants) <= 0) {
+        messages.push("Max applicants must be a positive number.")
+      }
+    }
+
+    if (step === 4 && formData.deadline) {
+      const deadline = new Date(`${formData.deadline}T23:59:59.999`)
+      if (!Number.isFinite(deadline.getTime()) || deadline < new Date(new Date().toISOString().slice(0, 10))) {
+        messages.push("Deadline must be today or later.")
+      }
+    }
+
+    if (messages.length) {
+      showErrorDialog("Please fix these issues", messages)
+      return false
+    }
+    return true
+  }
+
   async function saveStep(step: number) {
-    if (!taskId) throw new Error("Draft task not ready yet")
+    const activeTaskId = taskId ?? (await createDraftTask())
     setApiError("")
 
     if (step === 1) {
-      let dbCat = dbCategories.find((c) => c.name === formData.category)
+      let dbCat = findCategory(dbCategories, formData.category)
       if (!dbCat) {
         try {
           const res = await fetch("/api/categories", { method: "GET" })
           const data = await res.json().catch(() => null)
-          if (res.ok && Array.isArray(data)) {
-            const fresh = data
-              .map((c: any) => ({ id: Number(c?.id), name: String(c?.name || "") }))
-              .filter((c: any) => Number.isFinite(c.id) && c.name)
+          if (res.ok) {
+            const fresh = readCategories(data)
             setDbCategories(fresh)
-            dbCat = fresh.find((c: any) => c.name === formData.category)
+            dbCat = findCategory(fresh, formData.category)
           }
         } catch {
           // ignore
@@ -261,14 +324,14 @@ function CreateTaskContent() {
         categoryId,
         tags: formData.skills,
       }
-      const res = await fetch(`/api/tasks/${taskId}/step/1`, {
+      const res = await fetch(`/api/tasks/${activeTaskId}/step/1`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(extractMessages(data).join("\n") || "Step 1 failed")
-      return
+      return activeTaskId
     }
 
     if (step === 2) {
@@ -277,14 +340,14 @@ function CreateTaskContent() {
         requirements: formData.requirements,
         instructions: "",
       }
-      const res = await fetch(`/api/tasks/${taskId}/step/2`, {
+      const res = await fetch(`/api/tasks/${activeTaskId}/step/2`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(extractMessages(data).join("\n") || "Step 2 failed")
-      return
+      return activeTaskId
     }
 
     if (step === 3) {
@@ -293,14 +356,14 @@ function CreateTaskContent() {
         currency: "BSV",
         maxWorkers: formData.maxApplicants,
       }
-      const res = await fetch(`/api/tasks/${taskId}/step/3`, {
+      const res = await fetch(`/api/tasks/${activeTaskId}/step/3`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(extractMessages(data).join("\n") || "Step 3 failed")
-      return
+      return activeTaskId
     }
 
     if (step === 4) {
@@ -311,15 +374,17 @@ function CreateTaskContent() {
         featuredTask: false,
         autoApprove: false,
       }
-      const res = await fetch(`/api/tasks/${taskId}/step/4`, {
+      const res = await fetch(`/api/tasks/${activeTaskId}/step/4`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(extractMessages(data).join("\n") || "Step 4 failed")
-      return
+      return activeTaskId
     }
+
+    return activeTaskId
   }
 
   async function handlePublish() {
@@ -328,14 +393,13 @@ function CreateTaskContent() {
     setApiError("")
     try {
       // Ensure earlier steps are saved (best-effort).
-      await saveStep(1)
-      await saveStep(2)
-      await saveStep(3)
-      await saveStep(4)
+      let activeTaskId = await saveStep(1)
+      activeTaskId = await saveStep(2)
+      activeTaskId = await saveStep(3)
+      activeTaskId = await saveStep(4)
 
-      if (!taskId) throw new Error("Draft task not ready yet")
       if (editStatus !== "published") {
-        const res = await fetch(`/api/tasks/${taskId}/publish`, { method: "POST" })
+        const res = await fetch(`/api/tasks/${activeTaskId}/publish`, { method: "POST" })
         const data = await res.json().catch(() => null)
         if (!res.ok) throw new Error(data?.message || "Publish failed")
       }
@@ -827,18 +891,16 @@ function CreateTaskContent() {
 
           {currentStep < steps.length ? (
             <Button
-              onClick={async () => {
-                try {
-                  await saveStep(currentStep)
-                  setCurrentStep((prev) => Math.min(steps.length, prev + 1))
-                } catch (e) {
+              onClick={() => {
+                if (!validateStepForNavigation(currentStep)) return
+                const stepToSave = currentStep
+                setCurrentStep((prev) => Math.min(steps.length, prev + 1))
+                void saveStep(stepToSave).catch((e) => {
                   const msg = e instanceof Error ? e.message : "Failed to save step"
                   setApiError(msg)
-                  showErrorDialog("Please fix these issues", msg.split("\n").filter(Boolean))
-                }
+                })
               }}
               className="bg-bitcoin-500 hover:bg-bitcoin-600 text-white"
-              disabled={!taskId}
             >
               Next
               <ChevronRight className="ml-2 h-4 w-4" />

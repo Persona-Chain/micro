@@ -1,7 +1,6 @@
 import crypto from "crypto"
-import * as bsv from "bsv"
 import { bountyBeeApiFetch, getExternalCurrentUser } from "@/lib/server/bountybee-api"
-import { generateWalletMainnet } from "@/lib/server/bsv"
+import { generateWalletFromWif, generateWalletMainnet } from "@/lib/server/bsv"
 
 type ExternalAuthResponse = {
   success?: boolean
@@ -11,6 +10,23 @@ type ExternalAuthResponse = {
   token?: string
   token_ttl_seconds?: number
   encrypted_key?: string
+  message?: string
+}
+
+type ExternalWalletResponse = {
+  success?: boolean
+  symbol?: string
+  wallet?: {
+    address?: string | null
+    encrypted_key?: string | null
+    source?: string | null
+  }
+  message?: string
+}
+
+type ExternalWalletsResponse = {
+  success?: boolean
+  wallets?: Record<string, NonNullable<ExternalWalletResponse["wallet"]> | undefined>
   message?: string
 }
 
@@ -37,6 +53,74 @@ async function externalAuthFetch(path: string, body: Record<string, unknown>) {
     throw new Error(data?.message || "External auth request failed")
   }
   return data ?? {}
+}
+
+async function getExternalWallets(token: string) {
+  const data = await bountyBeeApiFetch<ExternalWalletsResponse>("/api/v1/wallets", { token })
+  return data.wallets || {}
+}
+
+async function saveExternalBsvWallet(input: {
+  token: string
+  address: string
+  encryptedKey: string
+}) {
+  await bountyBeeApiFetch<ExternalWalletResponse>("/api/v1/wallets/BSV", {
+    method: "PUT",
+    token: input.token,
+    body: {
+      address: input.address,
+      encrypted_key: input.encryptedKey,
+      source: "eggwallet",
+    },
+  })
+}
+
+function uniqueValues(values: string[]) {
+  return [...new Set(values.map((value) => value.replace(/\/+$/, "")).filter(Boolean))]
+}
+
+function getEggwalletBaseUrls() {
+  const explicitEggwalletUrl =
+    process.env.EGGWALLET_API_URL ||
+    process.env.EGGWALLET_URL ||
+    process.env.NEXT_PUBLIC_EGGWALLET_URL ||
+    ""
+
+  return uniqueValues([explicitEggwalletUrl, "http://127.0.0.1:8000"])
+}
+
+async function importBsvWalletIntoEggwallet(input: {
+  token: string
+  wif: string
+  email: string
+}) {
+  const cookieToken = encodeURIComponent(input.token)
+  for (const baseUrl of getEggwalletBaseUrls()) {
+    try {
+      const res = await fetch(`${baseUrl}/api/wallet/import`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${input.token}`,
+          Cookie: `eggwallet_auth_token=${cookieToken}; external_auth_token=${cookieToken}`,
+        },
+        body: JSON.stringify({
+          symbol: "BSV",
+          wif: input.wif,
+          email: input.email,
+        }),
+        cache: "no-store",
+      })
+
+      if (res.ok) return
+      const data = (await res.json().catch(() => null)) as { error?: string; detail?: string } | null
+      console.warn("Eggwallet BSV import failed:", baseUrl, data?.detail || data?.error || res.statusText)
+    } catch (error) {
+      console.warn("Eggwallet BSV import request failed:", baseUrl, error instanceof Error ? error.message : error)
+    }
+  }
 }
 
 function passwordKey(password: string, salt: Buffer) {
@@ -75,11 +159,6 @@ export function decryptWalletKeyFromExternal(encryptedKey: string, password: str
   ]).toString("utf8")
 }
 
-function publicKeyFromWif(wif: string) {
-  const privKey = bsv.PrivKey.fromWif(wif)
-  return bsv.PubKey.fromPrivKey(privKey).toString()
-}
-
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
@@ -107,11 +186,20 @@ export async function createExternalAuthAccount(input: {
   const external = await externalAuthFetch("/api/v1/auth/signup", {
     email,
     password: input.password,
-    address: wallet.address,
-    encrypted_key: encryptedKey,
   })
 
   if (external.token) {
+    await saveExternalBsvWallet({
+      token: external.token,
+      address: wallet.address,
+      encryptedKey,
+    })
+    await importBsvWalletIntoEggwallet({
+      token: external.token,
+      wif: wallet.wif,
+      email,
+    })
+
     await bountyBeeApiFetch("/api/v1/users/sync", {
       token: external.token,
       body: {
@@ -140,27 +228,81 @@ export async function loginWithExternalAuth(input: {
 
   if (!login.token) throw new Error("External auth did not return a session token")
 
-  const walletKey = await externalAuthFetch("/api/v1/auth/wallet-key", {
-    token: login.token,
-  })
-  if (!walletKey.encrypted_key) throw new Error("External auth did not return an encrypted wallet key")
+  const wallets = await getExternalWallets(login.token)
+  const bsvWallet = wallets.BSV || null
+  let resolvedBsvWallet: NonNullable<ExternalWalletResponse["wallet"]>
+  const existingEncryptedKey = bsvWallet?.encrypted_key || null
+  const existingDerivedWallet = existingEncryptedKey
+    ? generateWalletFromWif(decryptWalletKeyFromExternal(existingEncryptedKey, input.password))
+    : null
 
-  const address = walletKey.address || login.address
-  if (!address) throw new Error("External auth did not return a wallet address")
+  if (bsvWallet?.address) {
+    resolvedBsvWallet = bsvWallet
+  } else if (existingDerivedWallet && existingEncryptedKey) {
+      await saveExternalBsvWallet({
+        token: login.token,
+        address: existingDerivedWallet.address,
+        encryptedKey: existingEncryptedKey,
+      })
+      resolvedBsvWallet = {
+        address: existingDerivedWallet.address,
+        encrypted_key: existingEncryptedKey,
+        source: "eggwallet",
+      }
+  } else {
+    const wallet = generateWalletMainnet()
+    const encryptedKey = encryptWalletKeyForExternal(wallet.wif, input.password)
+    await saveExternalBsvWallet({
+      token: login.token,
+      address: wallet.address,
+      encryptedKey,
+    })
+    resolvedBsvWallet = {
+      address: wallet.address,
+      encrypted_key: encryptedKey,
+      source: "eggwallet",
+    }
+  }
+
+  const encryptedKey = resolvedBsvWallet.encrypted_key || null
+  const derivedWallet = encryptedKey
+    ? generateWalletFromWif(decryptWalletKeyFromExternal(encryptedKey, input.password))
+    : null
+  const address = resolvedBsvWallet.address
+  if (!address) throw new Error("External wallet storage did not return a BSV wallet address")
+  const derivedWalletMatchesAddress = derivedWallet?.address === address
+  if (derivedWallet?.wif && derivedWalletMatchesAddress) {
+    await importBsvWalletIntoEggwallet({
+      token: login.token,
+      wif: derivedWallet.wif,
+      email,
+    })
+  } else if (derivedWallet?.address && !derivedWalletMatchesAddress) {
+    console.warn("Stored BSV encrypted key does not match stored BSV address; keeping address unchanged.")
+  }
 
   let user = await getExternalCurrentUser(login.token)
   if (!user) {
-    const wif = decryptWalletKeyFromExternal(walletKey.encrypted_key, input.password)
+    const syncBody: Record<string, string> = {
+      username: usernameFromEmail(email),
+      displayName: usernameFromEmail(email),
+      address,
+    }
+    if (derivedWalletMatchesAddress && derivedWallet?.publicKeyHex) syncBody.publicKey = derivedWallet.publicKeyHex
+
     const synced = await bountyBeeApiFetch<{ user?: { id: number; username: string; email: string } }>("/api/v1/users/sync", {
       token: login.token,
-      body: {
-        username: usernameFromEmail(email),
-        displayName: usernameFromEmail(email),
-        address,
-        publicKey: publicKeyFromWif(wif),
-      },
+      body: syncBody,
     })
     user = synced.user || await getExternalCurrentUser(login.token)
+  } else {
+    const syncBody: Record<string, string> = { address }
+    if (derivedWalletMatchesAddress && derivedWallet?.publicKeyHex) syncBody.publicKey = derivedWallet.publicKeyHex
+
+    await bountyBeeApiFetch("/api/v1/users/sync", {
+      token: login.token,
+      body: syncBody,
+    })
   }
 
   if (!user) throw new Error("External backend did not return a user profile")

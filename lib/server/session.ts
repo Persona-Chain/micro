@@ -1,5 +1,5 @@
 import { cookies } from "next/headers"
-import { getExternalCurrentUser } from "@/lib/server/bountybee-api"
+import { BountyBeeApiError, getExternalCurrentUser } from "@/lib/server/bountybee-api"
 import { AUTH_COOKIE_NAME, EXTERNAL_AUTH_COOKIE_NAME, verifyJwtToken } from "@/lib/server/auth"
 
 export async function requireCurrentUser() {
@@ -13,7 +13,14 @@ export async function requireCurrentUser() {
   if (!Number.isFinite(userId)) return null
 
   if (!externalToken) return null
-  const user = await getExternalCurrentUser(externalToken)
+  let user = null
+  try {
+    user = await getExternalCurrentUser(externalToken)
+  } catch (error) {
+    if (error instanceof BountyBeeApiError && error.status === 401) return null
+    throw error
+  }
+
   if (!user || user.id !== userId) return null
   return { id: user.id, username: user.username, email: user.email }
 }
