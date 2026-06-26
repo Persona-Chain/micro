@@ -84,6 +84,32 @@ export interface AdminAnalytics {
     createdAt: string
   }>
 }
+
+function toNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
+function normalizeAdminAnalytics(data: unknown): AdminAnalytics {
+  const source = data && typeof data === "object" ? (data as Partial<AdminAnalytics>) : {}
+
+  return {
+    totalUsers: toNumber(source.totalUsers),
+    totalUsersGrowth: toNumber(source.totalUsersGrowth),
+    activeTasks: toNumber(source.activeTasks),
+    activeTasksGrowth: toNumber(source.activeTasksGrowth),
+    revenue30d: toNumber(source.revenue30d),
+    revenue30dGrowth: toNumber(source.revenue30dGrowth),
+    disputes: toNumber(source.disputes),
+    disputesPercentage: toNumber(source.disputesPercentage),
+    disputesGrowth: toNumber(source.disputesGrowth),
+    revenueAddress: typeof source.revenueAddress === "string" ? source.revenueAddress : "",
+    revenueData: Array.isArray(source.revenueData) ? source.revenueData : [],
+    categoryData: Array.isArray(source.categoryData) ? source.categoryData : [],
+    users: Array.isArray(source.users) ? source.users : [],
+    tasks: Array.isArray(source.tasks) ? source.tasks : [],
+    disputesList: Array.isArray(source.disputesList) ? source.disputesList : [],
+  }
+}
 import {
   AreaChart,
   Area,
@@ -162,7 +188,7 @@ export default function AdminPage() {
           throw new Error(data?.message || `Failed to fetch analytics: ${response.statusText}`)
         }
         const data = await response.json()
-        setAnalytics(data)
+        setAnalytics(normalizeAdminAnalytics(data))
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to load analytics"
         setError(errorMessage)
