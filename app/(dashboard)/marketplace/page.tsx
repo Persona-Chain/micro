@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { createFavoriteTask, useFavoriteTasks, type FavoriteTask } from "@/hooks/use-favorite-tasks"
 import { formatSatoshis, timeAgo, truncate } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 
@@ -40,6 +41,7 @@ export default function MarketplacePage() {
   const [displayedTasks, setDisplayedTasks] = useState<any[]>([])
   const [marketplaceCategories, setMarketplaceCategories] = useState<Array<{ id: number; name: string; count: number }>>([])
   const [stats, setStats] = useState({ totalTasks: 0, featuredTasks: 0, totalReward: 0, matchingTasks: 0 })
+  const { favoriteTasks, isFavorite, toggleFavorite, removeFavorite, isReady } = useFavoriteTasks()
 
   useEffect(() => {
     let cancelled = false
@@ -66,6 +68,15 @@ export default function MarketplacePage() {
   }, [searchQuery, selectedCategory, sortBy])
 
   const featuredTasks = displayedTasks.filter((t) => t.featured)
+  const visibleFavoriteTasks = favoriteTasks.filter((task) => {
+    const matchesSearch =
+      !searchQuery ||
+      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      task.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
+    const matchesCategory = !selectedCategory || task.category === selectedCategory
+    return matchesSearch && matchesCategory
+  })
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -241,6 +252,37 @@ export default function MarketplacePage() {
           </div>
         )}
 
+        {isReady && (
+          <div>
+            <div className="flex items-center justify-between mb-4 gap-3">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                Saved Tasks ({visibleFavoriteTasks.length})
+              </h2>
+            </div>
+
+            {visibleFavoriteTasks.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {visibleFavoriteTasks.map((task, index) => (
+                  <TaskCard
+                    key={`favorite-${task.id}`}
+                    task={task}
+                    index={index}
+                    isSaved={isFavorite(task.id)}
+                    onToggleSaved={() => removeFavorite(task.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="p-6 text-sm text-muted-foreground">
+                  Star a task to save it here for quick access later.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
         {/* All Tasks */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -260,7 +302,13 @@ export default function MarketplacePage() {
           ) : displayedTasks.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {displayedTasks.map((task, index) => (
-                <TaskCard key={task.id} task={task} index={index} />
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  index={index}
+                  isSaved={isFavorite(task.id)}
+                  onToggleSaved={() => toggleFavorite(createFavoriteTask(task))}
+                />
               ))}
             </div>
           ) : (
@@ -291,10 +339,14 @@ function TaskCard({
   task,
   index,
   featured = false,
+  isSaved = false,
+  onToggleSaved,
 }: {
   task: any
   index: number
   featured?: boolean
+  isSaved?: boolean
+  onToggleSaved?: () => void
 }) {
   const employerName = task?.employer?.displayName || "Employer"
   const employerAvatar = task?.employer?.avatar || ""
@@ -307,15 +359,15 @@ function TaskCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.05 }}
     >
-      <Link href={`/task/${task.id}` as Route}>
-        <Card
-          className={cn(
-            "h-full group hover:border-bitcoin-500/30 transition-all duration-300 cursor-pointer",
-            featured && "border-bitcoin-500/20 shadow-lg shadow-bitcoin-500/5"
-          )}
-        >
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between mb-3">
+      <Card
+        className={cn(
+          "h-full group hover:border-bitcoin-500/30 transition-all duration-300",
+          featured && "border-bitcoin-500/20 shadow-lg shadow-bitcoin-500/5"
+        )}
+      >
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="text-xs">
                 {task.category}
               </Badge>
@@ -326,7 +378,19 @@ function TaskCard({
                 </Badge>
               )}
             </div>
+            <Button
+              type="button"
+              variant={isSaved ? "bitcoin" : "ghost"}
+              size="icon-sm"
+              className="shrink-0"
+              aria-label={isSaved ? "Remove from saved tasks" : "Save task"}
+              onClick={onToggleSaved}
+            >
+              <Star className={cn("h-4 w-4", isSaved && "fill-current")} />
+            </Button>
+          </div>
 
+          <Link href={`/task/${task.id}` as Route} className="block">
             <h3 className="font-semibold text-sm mb-2 group-hover:text-bitcoin-500 transition-colors line-clamp-2">
               {task.title}
             </h3>
@@ -384,9 +448,9 @@ function TaskCard({
                 {statusText}
               </Badge>
             </div>
-          </CardContent>
-        </Card>
-      </Link>
+          </Link>
+        </CardContent>
+      </Card>
     </motion.div>
   )
 }

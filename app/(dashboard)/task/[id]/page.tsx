@@ -35,6 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { createFavoriteTask, useFavoriteTasks } from "@/hooks/use-favorite-tasks"
 import { formatSatoshis, timeAgo } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 
@@ -61,6 +62,7 @@ export default function TaskDetailsPage() {
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false)
   const [submissionText, setSubmissionText] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const { isFavorite, toggleFavorite, isReady } = useFavoriteTasks()
   const employerName = task?.employer?.displayName || "Employer"
   const employerAvatar = task?.employer?.avatar || ""
   const employerUsername = task?.employer?.username || ""
@@ -357,7 +359,21 @@ export default function TaskDetailsPage() {
                   </Badge>
                 )}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">{task.title}</h1>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{task.title}</h1>
+                {isReady && (
+                  <Button
+                    type="button"
+                    variant={isFavorite(task.id) ? "bitcoin" : "outline"}
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => toggleFavorite(createFavoriteTask(task))}
+                  >
+                    <Star className={cn("h-4 w-4", isFavorite(task.id) && "fill-current")} />
+                    {isFavorite(task.id) ? "Saved" : "Save task"}
+                  </Button>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
