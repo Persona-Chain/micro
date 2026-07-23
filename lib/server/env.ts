@@ -7,6 +7,6 @@ export function getJwtSecret() {
 }
 
 export function getAppUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:38473"
 }
 

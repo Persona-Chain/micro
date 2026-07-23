@@ -34,10 +34,15 @@ JWT_SECRET=next-cookie-secret
 
 # Run development server
 npm run dev
+# Opens at http://localhost:38473
 
 # Build for production
 npm run build
 ```
+
+The web application uses port `38473` for both development and production. On
+a VPS, set `NEXT_PUBLIC_APP_URL` to the public HTTPS URL served by your reverse
+proxy (for example, `https://app.example.com`) instead of a localhost address.
 
 ## External Backend
 
