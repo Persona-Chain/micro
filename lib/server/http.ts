@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
 
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message)
+    this.name = "HttpError"
+  }
+}
+
 export function jsonOk<T>(data: T, init?: ResponseInit) {
   return NextResponse.json(data, { status: 200, ...init })
 }
@@ -15,6 +25,9 @@ export function jsonError(message: string, status: number = 400, details?: unkno
 export function normalizeError(e: unknown) {
   if (e instanceof ZodError) {
     return jsonError("Validation error", 422, e.flatten())
+  }
+  if (e instanceof HttpError) {
+    return jsonError(e.message, e.status)
   }
   console.error(e)
   const message = e instanceof Error ? e.message : "Internal server error"

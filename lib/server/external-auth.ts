@@ -1,6 +1,7 @@
 import crypto from "crypto"
 import { bountyBeeApiFetch, getExternalCurrentUser } from "@/lib/server/bountybee-api"
 import { generateWalletFromWif, generateWalletMainnet } from "@/lib/server/bsv"
+import { HttpError } from "@/lib/server/http"
 
 type ExternalAuthResponse = {
   success?: boolean
@@ -11,6 +12,7 @@ type ExternalAuthResponse = {
   token_ttl_seconds?: number
   encrypted_key?: string
   message?: string
+  error?: string
 }
 
 type ExternalWalletResponse = {
@@ -40,17 +42,26 @@ function getExternalAuthConfig() {
 
 async function externalAuthFetch(path: string, body: Record<string, unknown>) {
   const { baseUrl, serviceKey } = getExternalAuthConfig()
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Service-Key": serviceKey,
-    },
-    body: JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Service-Key": serviceKey,
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new HttpError("Authentication service is temporarily unavailable", 502)
+  }
   const data = (await res.json().catch(() => null)) as ExternalAuthResponse | null
   if (!res.ok || data?.success === false) {
-    throw new Error(data?.message || "External auth request failed")
+    const message = data?.message || data?.error
+    if (res.status === 400 || res.status === 401 || res.status === 403 || res.status === 409) {
+      throw new HttpError(message || "Authentication request rejected", res.status)
+    }
+    throw new HttpError(message || "Authentication service request failed", 502)
   }
   return data ?? {}
 }
