@@ -5,24 +5,21 @@ import { sign, verify, Secret, SignOptions } from 'jsonwebtoken'
 import type { StringValue } from 'ms'
 import { randomBytes } from 'crypto'
 import { MailService } from '../mail/mail.service'
+import { getJwtSecret } from './jwt-secret'
 
 @Injectable()
 export class AuthService {
   constructor(private prisma: PrismaService, private mail: MailService) {}
 
-  private jwtSecret() {
-    return process.env.JWT_SECRET || 'change-me-in-prod'
-  }
-
   signAccessToken(userId: string) {
-    const secret: Secret = this.jwtSecret()
+    const secret: Secret = getJwtSecret()
     const expiresInVal = (process.env.JWT_EXPIRES_IN || '1h') as StringValue
     const opts: SignOptions = { expiresIn: expiresInVal }
     return sign({ sub: userId, type: 'access' }, secret, opts)
   }
 
   signRefreshToken(userId: string, sessionId: string, expiresIn: string | number = process.env.REFRESH_TOKEN_EXPIRES_IN || '30d') {
-    const secret: Secret = this.jwtSecret()
+    const secret: Secret = getJwtSecret()
     const expiresInVal = (typeof expiresIn === 'string' ? (expiresIn as StringValue) : expiresIn) as StringValue | number
     const opts: SignOptions = { expiresIn: expiresInVal }
     return sign({ sub: userId, sid: sessionId, type: 'refresh' }, secret, opts)
@@ -120,7 +117,7 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     try {
-      const secret: Secret = this.jwtSecret()
+      const secret: Secret = getJwtSecret()
       const payload = verify(refreshToken, secret) as any
       if (payload.type !== 'refresh') throw new UnauthorizedException()
       const session = await this.prisma.userSession.findUnique({ where: { id: payload.sid } })

@@ -1,12 +1,9 @@
-export function getJwtSecret() {
+export function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET
+
   if (!secret || secret.length < 32) {
     throw new Error("JWT_SECRET must be configured and contain at least 32 characters")
   }
+
   return secret
 }
-
-export function getAppUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:38473"
-}
-
