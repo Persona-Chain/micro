@@ -55,9 +55,7 @@ const securityHeaders = [
 
 const nextConfig = {
   poweredByHeader: false,
-  experimental: {
-    typedRoutes: true,
-  },
+  typedRoutes: true,
   serverExternalPackages: [
     "@prisma/client",
     "@prisma/adapter-better-sqlite3",
