@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { motion } from "framer-motion"
 import {
   Zap,
@@ -251,8 +252,15 @@ export default function LandingPage() {
               </div>
             </motion.div>
           </div>
-            <div className="relative hidden min-h-[520px] lg:block" aria-hidden="true">
-              <div className="absolute inset-x-8 bottom-4 h-20 rounded-full bg-bitcoin-500/10 blur-2xl" />
+            <div className="relative hidden h-[520px] w-full max-w-[540px] justify-self-end lg:block" aria-hidden="true">
+              <Image
+                src="/logo.webp"
+                alt=""
+                fill
+                priority
+                sizes="(min-width: 1024px) 540px, 0px"
+                className="object-contain drop-shadow-[0_0_30px_rgba(247,147,26,0.22)]"
+              />
             </div>
           </div>
         </div>
