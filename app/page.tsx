@@ -10,7 +10,6 @@ import {
   Globe,
   Bitcoin,
   CheckCircle2,
-  Star,
   ChevronDown,
   Play,
 } from "lucide-react"
@@ -81,30 +80,6 @@ const steps = [
   },
 ]
 
-const testimonials = [
-  {
-    name: "Sarah Chen",
-    role: "UI/UX Designer",
-    avatar: "SC",
-    content: "Bountybee changed how I freelance. Getting paid in Bitcoin instantly is a game-changer. I've earned over 2 BSV in just 6 months!",
-    rating: 5,
-  },
-  {
-    name: "Marcus Johnson",
-    role: "Full-Stack Developer",
-    avatar: "MJ",
-    content: "The escrow system gives me confidence that I'll get paid. The platform is sleek, fast, and the community is amazing.",
-    rating: 5,
-  },
-  {
-    name: "Elena Rodriguez",
-    role: "Technical Writer",
-    avatar: "ER",
-    content: "As someone who values financial sovereignty, getting paid in Bitcoin aligns perfectly with my values. The tasks are interesting and well-compensated.",
-    rating: 5,
-  },
-]
-
 function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
   return (
     <motion.span
@@ -167,7 +142,6 @@ export default function LandingPage() {
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
             <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
-            <a href="#testimonials" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Testimonials</a>
             <a href="#faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">FAQ</a>
           </nav>
           <div className="flex items-center gap-3">
@@ -352,53 +326,6 @@ export default function LandingPage() {
                     <ArrowRight className="h-6 w-6 text-muted-foreground/30" />
                   </div>
                 )}
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section id="testimonials" className="scroll-mt-24 py-20 lg:py-32">
-        <div className="container">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <Badge variant="bitcoin" className="mb-4">Testimonials</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
-              Loved by freelancers worldwide
-            </h2>
-            <p className="text-muted-foreground text-lg">
-              Join thousands of freelancers who are already earning Bitcoin on Bountybee.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((testimonial, index) => (
-              <motion.div
-                key={testimonial.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-              >
-                <Card className="h-full hover:border-bitcoin-500/30 transition-all duration-300">
-                  <CardContent className="p-6 text-center md:text-left">
-                    <div className="flex gap-1 mb-4 justify-center md:justify-start">
-                      {Array.from({ length: testimonial.rating }).map((_, i) => (
-                        <Star key={i} className="h-4 w-4 fill-bitcoin-500 text-bitcoin-500" />
-                      ))}
-                    </div>
-                    <p className="text-muted-foreground mb-6">"{testimonial.content}"</p>
-                    <div className="flex items-center gap-3 justify-center md:justify-start">
-                      <div className="h-10 w-10 rounded-full bg-bitcoin-500/10 flex items-center justify-center text-bitcoin-500 font-semibold text-sm">
-                        {testimonial.avatar}
-                      </div>
-                      <div>
-                        <div className="font-medium text-sm">{testimonial.name}</div>
-                        <div className="text-xs text-muted-foreground">{testimonial.role}</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               </motion.div>
             ))}
           </div>
