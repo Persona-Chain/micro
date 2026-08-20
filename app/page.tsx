@@ -182,12 +182,16 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-bitcoin-500/5 via-transparent to-transparent" />
-        <div className="absolute top-20 left-1/2 aspect-square w-[90vw] max-w-[600px] -translate-x-1/2 rounded-full bg-bitcoin-500/10 opacity-50 blur-3xl" />
+      <section
+        className="relative isolate overflow-hidden bg-cover bg-center bg-no-repeat pt-32 pb-20 lg:pt-44 lg:pb-28"
+        style={{ backgroundImage: "url('/background.webp')" }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-black/35" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
 
         <div className="container relative z-10">
-          <div className="max-w-4xl mx-auto text-center">
+          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+            <div className="max-w-2xl text-center lg:text-left">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -215,7 +219,7 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
+              className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto lg:mx-0 mb-10"
             >
               The premier micro-freelancing platform powered by Bitcoin SV. 
               Complete tasks, build your reputation, and get paid instantly.
@@ -225,7 +229,7 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
-              className="flex flex-col sm:flex-row items-center justify-center gap-4"
+              className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4"
             >
               <Link href="/marketplace">
                 <Button size="lg" className="bg-bitcoin-500 hover:bg-bitcoin-600 text-white shadow-lg shadow-bitcoin-500/25 text-base px-8">
@@ -272,6 +276,10 @@ export default function LandingPage() {
                 <div className="text-sm text-muted-foreground mt-1">Avg. Rating</div>
               </div>
             </motion.div>
+          </div>
+            <div className="relative hidden min-h-[520px] lg:block" aria-hidden="true">
+              <div className="absolute inset-x-8 bottom-4 h-20 rounded-full bg-bitcoin-500/10 blur-2xl" />
+            </div>
           </div>
         </div>
       </section>
