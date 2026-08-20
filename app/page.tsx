@@ -159,7 +159,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section
         className="relative isolate overflow-hidden bg-cover bg-center bg-no-repeat pt-32 pb-20 lg:pt-44 lg:pb-28"
-        style={{ backgroundImage: "url('/background.webp')" }}
+        style={{ backgroundImage: "url('/background1.webp')" }}
       >
         <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-black/35" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
